@@ -1,4 +1,5 @@
 import { http, HttpResponse } from 'msw'
+import { xtreamHandlers } from './xtreamHandlers.js'
 import fs from 'fs'
 
 export const handlers = [
@@ -55,5 +56,6 @@ export const handlers = [
         Location: 'https://30a-tv.com/feeds/vidaa/cars.m3u8'
       }
     })
-  })
+  }),
+  ...xtreamHandlers
 ]
