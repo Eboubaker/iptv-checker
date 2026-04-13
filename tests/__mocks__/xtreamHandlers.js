@@ -304,13 +304,19 @@ export const xtreamHandlers = [
   })
 ]
 
-// Panel API that returns 500 (for fallback testing)
+// Player API auth that returns 500 — forces fallback to panel_api
+export const xtreamPlayerAuthFailHandlers = [
+  http.get(`${XTREAM_HOST}/player_api.php`, () => {
+    return new HttpResponse(null, { status: 500 })
+  })
+]
+
+// Panel API that returns 500 (kept for reference)
 export const xtreamPanelFailHandlers = [
   http.get(`${XTREAM_HOST}/panel_api.php`, () => {
     return new HttpResponse(null, { status: 500 })
   })
 ]
-
 export {
   XTREAM_HOST,
   USERNAME,
