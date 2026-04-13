@@ -4,6 +4,7 @@ import app from '../package.json' with { type: 'json' }
 import { Playlist } from '../src/core/Playlist.js'
 import { Logger } from '../src/core/Logger.js'
 import { IPTVChecker } from '../src/index.js'
+import { PlaylistParser } from '../src/core/PlaylistParser.js'
 import dateFormat from 'dateformat'
 import { program } from 'commander'
 import ProgressBar from 'progress'
@@ -34,6 +35,7 @@ program
   )
   .option('-x, --proxy <url>', 'Set HTTP proxy to tunnel through')
   .option('-k, --insecure', 'Allow insecure connections when using SSL')
+  .option('-c, --counts-only', 'Only print playlist counts (no stream checks)')
   .option('-D, --debug', 'Enable debug mode')
   .action((str = null) => {
     stdin = str
@@ -62,18 +64,27 @@ let bar
 const stats = {
   total: 0,
   online: 0,
-  failed: 0
+  failed: 0,
+  live: 0,
+  vod: 0,
+  series: 0,
+  other: 0,
+  groups: {}
 }
 
-const outputDir = options.output
-try {
-  fs.lstatSync(outputDir)
-} catch (e) {
-  fs.mkdirSync(outputDir)
-}
+let onlinePlaylist
+let failedPlaylist
+if (!options.countsOnly) {
+  const outputDir = options.output
+  try {
+    fs.lstatSync(outputDir)
+  } catch (e) {
+    fs.mkdirSync(outputDir)
+  }
 
-const onlinePlaylist = new Playlist(`${outputDir}/online.m3u`)
-const failedPlaylist = new Playlist(`${outputDir}/failed.m3u`)
+  onlinePlaylist = new Playlist(`${outputDir}/online.m3u`)
+  failedPlaylist = new Playlist(`${outputDir}/failed.m3u`)
+}
 
 init()
 
@@ -82,6 +93,14 @@ async function init() {
 
   try {
     if (!stdin || !stdin.length) stdin = await getStdin()
+
+    if (options.countsOnly) {
+      const parser = new PlaylistParser({ config })
+      const playlist = await parser.parse(stdin)
+      const result = summarizePlaylist(playlist)
+      logger.info(`\n${formatCountsResult(result)}`)
+      process.exit(0)
+    }
 
     const checker = new IPTVChecker(config)
     const checked = await checker.checkPlaylist(stdin)
@@ -104,6 +123,8 @@ async function init() {
 }
 
 function afterEach(item) {
+  if (options.countsOnly) return
+
   if (item.status.ok) {
     onlinePlaylist.append(item)
   } else {
@@ -116,8 +137,68 @@ function afterEach(item) {
 }
 
 function setUp(playlist) {
+  if (options.countsOnly) return
+
   stats.total = playlist.items.length
   bar = new ProgressBar('[:bar] :current/:total (:percent) ', {
     total: stats.total
   })
+}
+
+function summarizePlaylist(playlist) {
+  const result = {
+    total: playlist.items.length,
+    live: 0,
+    vod: 0,
+    series: 0,
+    other: 0,
+    groups: {}
+  }
+
+  for (const item of playlist.items) {
+    const type = detectType(item)
+    if (type === 'live') result.live += 1
+    else if (type === 'vod') result.vod += 1
+    else if (type === 'series') result.series += 1
+    else result.other += 1
+
+    const group = item.group?.title
+    if (group) {
+      result.groups[group] = (result.groups[group] || 0) + 1
+    }
+  }
+
+  return result
+}
+
+function detectType(item) {
+  const raw = item.raw || ''
+  const match = /x-tvg-type="([^"]+)"/i.exec(raw)
+  if (match && match[1]) return String(match[1]).toLowerCase()
+
+  const url = String(item.url || '').toLowerCase()
+  if (url.includes('/movie/')) return 'vod'
+  if (url.includes('/series/')) return 'series'
+  if (url.startsWith('http://') || url.startsWith('https://')) return 'live'
+  return 'other'
+}
+
+function formatCountsResult(result) {
+  const lines = [
+    `Total: ${result.total}`,
+    `Live: ${result.live}`,
+    `VOD: ${result.vod}`,
+    `Series: ${result.series}`,
+    `Other: ${result.other}`
+  ]
+
+  const groupEntries = Object.entries(result.groups)
+  if (groupEntries.length) {
+    lines.push(`Groups: ${groupEntries.length}`)
+    for (const [group, count] of groupEntries.sort((a, b) => b[1] - a[1])) {
+      lines.push(`- ${group}: ${count}`)
+    }
+  }
+
+  return lines.join('\n')
 }

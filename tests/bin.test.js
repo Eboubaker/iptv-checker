@@ -54,6 +54,20 @@ it(`should respect proxy argument`, () => {
   expect(load('output/online.m3u')).toBe(load('expected/output/simple/online.m3u'))
 })
 
+it(`should output only playlist counts`, () => {
+  const output = execSync(`node bin/iptv-checker.js --counts-only tests/__data__/input/simple.m3u`, {
+    encoding: 'utf8'
+  })
+
+  expect(output).toContain('Total: 2')
+  expect(output).toContain('Live: 2')
+  expect(output).toContain('VOD: 0')
+  expect(output).toContain('Series: 0')
+  expect(output).toContain('Other: 0')
+  expect(output).toContain('Groups: 1')
+  expect(output).toContain('- Auto;Comedy;Entertainment: 1')
+})
+
 function load(filepath) {
   return fs.readFileSync(`tests/__data__/${filepath}`, 'utf-8')
 }
