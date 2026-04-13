@@ -1,6 +1,8 @@
 import app from '../package.json' with { type: 'json' }
 import { PlaylistTester } from './core/PlaylistTester.js'
 import { StreamTester } from './core/StreamTester.js'
+import { XtreamClient } from './core/XtreamClient.js'
+import { XtreamUrlParser } from './core/XtreamUrlParser.js'
 import { server } from '../tests/__mocks__/node.js'
 import { Logger } from './core/Logger.js'
 import { TESTING } from './constants.js'
@@ -42,3 +44,5 @@ export class IPTVChecker {
     return this.streamTester.test(item)
   }
 }
+
+export { XtreamClient, XtreamUrlParser }
