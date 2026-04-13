@@ -181,18 +181,22 @@ describe('XtreamClient', () => {
     })
   })
 
-  describe('panel_api primary flow', () => {
-    it('should fetch all using panel_api as primary', async () => {
+  describe('fetchAll priority', () => {
+    it('should fetch all using player_api as primary (with images)', async () => {
       const result = await client.fetchAll()
-      expect(result.source).toBe('panel_api')
+      expect(result.source).toBe('player_api')
       expect(result.streams.length).toBeGreaterThan(0)
       expect(result.categories).toHaveProperty('live')
       expect(result.categories).toHaveProperty('movie')
       expect(result.categories).toHaveProperty('series')
+      // Verify images are present (stream_icon/cover from player_api)
+      const liveStream = result.streams.find(s => s._type === 'live')
+      expect(liveStream.stream_icon).toBeTruthy()
     })
 
-    it('should fall back to player_api when panel_api fails', async () => {
-      server.use(...xtreamPanelFailHandlers)
+    it('should fall back to panel_api when player_api auth fails', async () => {
+      const { xtreamPlayerAuthFailHandlers } = await import('./__mocks__/xtreamHandlers.js')
+      server.use(...xtreamPlayerAuthFailHandlers)
 
       const fallbackClient = new XtreamClient({
         host: XTREAM_HOST,
@@ -202,7 +206,7 @@ describe('XtreamClient', () => {
       })
 
       const result = await fallbackClient.fetchAll()
-      expect(result.source).toBe('player_api')
+      expect(result.source).toBe('panel_api')
       expect(result.streams.length).toBeGreaterThan(0)
 
       server.resetHandlers()
@@ -221,6 +225,7 @@ describe('XtreamClient', () => {
       expect(m3u).toContain('tvg-logo="https://example.com/icons/cnn.png"')
       expect(m3u).toContain('group-title="News"')
       expect(m3u).toContain('group-title="Sports"')
+      expect(m3u).toContain('x-tvg-type="live"')
       expect(m3u).toContain(`/${USERNAME}/${PASSWORD}/1001.ts`)
       expect(m3u).toContain('CNN HD')
     })
@@ -233,6 +238,7 @@ describe('XtreamClient', () => {
 
       expect(m3u).toContain('tvg-logo="https://image.tmdb.org/t/p/w600_and_h900/matrix.jpg"')
       expect(m3u).toContain('group-title="Action"')
+      expect(m3u).toContain('x-tvg-type="vod"')
       expect(m3u).toContain(`/movie/${USERNAME}/${PASSWORD}/2001.mp4`)
       expect(m3u).toContain(`/movie/${USERNAME}/${PASSWORD}/2002.mkv`)
     })
@@ -245,6 +251,7 @@ describe('XtreamClient', () => {
 
       expect(m3u).toContain('tvg-logo="https://image.tmdb.org/t/p/w600_and_h900/breakingbad.jpg"')
       expect(m3u).toContain('group-title="Netflix"')
+      expect(m3u).toContain('x-tvg-type="series"')
       expect(m3u).toContain('Breaking Bad')
     })
 

@@ -81,24 +81,9 @@ export class XtreamClient {
   }
 
   async fetchAll() {
-    // Try panel_api first (primary)
+    // Primary: player_api individual calls — reliably includes stream_icon/cover images
     try {
-      const panelData = await this.getPanelData()
-      if (panelData.user_info) {
-        this.userInfo = panelData.user_info
-        this.serverInfo = panelData.server_info
-      }
-      const streams = this._extractPanelStreams(panelData)
-      if (streams.length > 0) {
-        const categories = panelData.categories || {}
-        return { streams, categories, source: 'panel_api' }
-      }
-    } catch {
-      // panel_api failed, fall through to player_api
-    }
-
-    // Fallback: player_api
-    await this.authenticate()
+      await this.authenticate()
 
     const [liveCategories, vodCategories, seriesCategories, liveStreams, vodStreams, series] =
       await Promise.all([
@@ -110,19 +95,34 @@ export class XtreamClient {
         this.getSeries().catch(() => [])
       ])
 
-    const categories = {
-      live: liveCategories,
-      movie: vodCategories,
-      series: seriesCategories
+      const categories = {
+        live: liveCategories,
+        movie: vodCategories,
+        series: seriesCategories
+      }
+
+      const streams = [
+        ...liveStreams.map(s => ({ ...s, _type: 'live' })),
+        ...vodStreams.map(s => ({ ...s, _type: 'movie' })),
+        ...series.map(s => ({ ...s, _type: 'series' }))
+      ]
+
+      if (streams.length > 0) {
+        return { streams, categories, source: 'player_api' }
+      }
+    } catch {
+      // player_api failed, fall through to panel_api
     }
 
-    const streams = [
-      ...liveStreams.map(s => ({ ...s, _type: 'live' })),
-      ...vodStreams.map(s => ({ ...s, _type: 'movie' })),
-      ...series.map(s => ({ ...s, _type: 'series' }))
-    ]
-
-    return { streams, categories, source: 'player_api' }
+    // Fallback: panel_api
+    const panelData = await this.getPanelData()
+    if (panelData.user_info) {
+      this.userInfo = panelData.user_info
+      this.serverInfo = panelData.server_info
+    }
+    const streams = this._extractPanelStreams(panelData)
+    const categories = panelData.categories || {}
+    return { streams, categories, source: 'panel_api' }
   }
 
   buildStreamUrl(streamId, ext = 'ts') {
@@ -146,6 +146,7 @@ export class XtreamClient {
 
     for (const stream of streams) {
       const type = stream._type || stream.stream_type || 'live'
+      const tvgType = type === 'movie' ? 'vod' : type
       const name = stream.name || ''
       const logo = stream.stream_icon || stream.cover || ''
       const categoryId = stream.category_id || ''
@@ -165,7 +166,7 @@ export class XtreamClient {
         url = this.buildStreamUrl(stream.stream_id)
       }
 
-      output += `#EXTINF:-1 tvg-id="${epgId}" tvg-name="${name}" tvg-logo="${logo}" group-title="${groupTitle}",${name}\n`
+      output += `#EXTINF:-1 tvg-id="${epgId}" tvg-name="${name}" tvg-logo="${logo}" group-title="${groupTitle}" x-tvg-type="${tvgType}",${name}\n`
       output += `${url}\n`
     }
 
